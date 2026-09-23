@@ -1,0 +1,38 @@
+{
+  "name": "ai-pr-governor",
+  "version": "1.0.0",
+  "description": "AI-powered pull request review and governance system combining LLM reasoning, static analysis, and risk-based controls.",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jejegoscenko/ai-pr-governor.git"
+  },
+  "keywords": [
+    "ai",
+    "code-review",
+    "github",
+    "pull-request",
+    "llm",
+    "governance"
+  ],
+  "author": "Jekaterina Jegoscenko",
+  "license": "MIT",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/jejegoscenko/ai-pr-governor/issues"
+  },
+  "homepage": "https://github.com/jejegoscenko/ai-pr-governor#readme",
+  "devDependencies": {
+    "@types/node": "^26.5.1",
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "octokit": "^5.0.5",
+    "openai": "^7.23.0"
+  }
+}
