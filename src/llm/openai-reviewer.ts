@@ -1,6 +1,13 @@
+
 import "dotenv/config";
 import OpenAI from "openai";
-import type { CodeReviewer, ReviewResult } from "./reviewer.js";
+import { zodTextFormat } from "openai/helpers/zod";
+
+import type { CodeReviewer } from "./reviewer.js";
+import {
+  ReviewResultSchema,
+  type ReviewResult,
+} from "./review-schema.js";
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -8,45 +15,47 @@ const client = new OpenAI({
 
 export class OpenAIReviewer implements CodeReviewer {
   async review(context: string): Promise<ReviewResult> {
-    const response = await client.responses.create({
+    const response = await client.responses.parse({
       model: "gpt-5.6",
       instructions: `
 You are a senior software engineer performing a pull request review.
 
-Review only the code changes provided to you.
+Review only the code changes provided.
 
 Focus on:
-- bugs and correctness
+- correctness and bugs
 - security vulnerabilities
 - maintainability problems
 - error handling
 - risky implementation choices
 
-Do not report stylistic preferences unless they materially affect the code.
+Avoid stylistic feedback unless it materially affects the code.
 
-Return your review as JSON with this structure:
-
-{
-  "summary": "Short overall assessment",
-  "findings": [
-    {
-      "file": "path/to/file",
-      "severity": "low | medium | high",
-      "title": "Short title",
-      "explanation": "Clear explanation of the problem"
-    }
-  ]
-}
+Report only actionable findings.
+Do not assume that a suspicious change is necessarily a bug.
+If more context is needed to confirm a finding, explain the uncertainty.
 `,
       input: context,
+      text: {
+        format: zodTextFormat(
+          ReviewResultSchema,
+          "code_review"
+        ),
+      },
     });
 
-    const text = response.output_text;
-
-    if (!text) {
-      throw new Error("OpenAI returned an empty review.");
+    if (response.status !== "completed") {
+      throw new Error(
+        `AI review did not complete: ${response.status}`
+      );
     }
 
-    return JSON.parse(text) as ReviewResult;
+    if (!response.output_parsed) {
+      throw new Error(
+        "AI review returned no structured result."
+      );
+    }
+
+    return response.output_parsed;
   }
 }

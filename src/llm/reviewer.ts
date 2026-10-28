@@ -1,14 +1,4 @@
-export type ReviewFinding = {
-  file: string;
-  severity: "low" | "medium" | "high";
-  title: string;
-  explanation: string;
-};
-
-export type ReviewResult = {
-  summary: string;
-  findings: ReviewFinding[];
-};
+import type { ReviewResult } from "./review-schema.js";
 
 export interface CodeReviewer {
   review(context: string): Promise<ReviewResult>;
