@@ -4,6 +4,8 @@ import { fetchPullRequest } from "./github/fetch-pr.js";
 import { buildReviewContext } from "./review/context.js";
 import { discoverContext } from "./review/discover-context.js";
 import { OpenAIReviewer } from "./llm/openai-reviewer.js";
+import { formatReview } from "./github/format-review.js";
+import { publishReview } from "./github/publish-review.js";
 
 async function main(): Promise<void> {
   // 1. Load configuration
@@ -104,6 +106,30 @@ ${additionalContext || "No additional relevant files identified."}
     console.log(finding.title);
     console.log(finding.explanation);
   }
+
+  // 8. Format the review for GitHub
+  const reviewBody = formatReview(review);
+
+  console.log("\n=== GITHUB REVIEW PREVIEW ===");
+  console.log(reviewBody);
+
+  // 9. Publish only when explicitly enabled
+  if (process.env.PUBLISH_REVIEW !== "true") {
+    console.log("\nPublishing disabled. Review was not posted to GitHub.");
+    return;
+  }
+
+  console.log("\nPublishing review to GitHub...");
+
+  const reviewId = await publishReview(
+    owner,
+    repo,
+    pullNumber,
+    pullRequest.head.sha,
+    reviewBody
+  );
+
+  console.log(`Review published successfully! ID: ${reviewId}`);
 }
 
 main().catch((error: unknown) => {
