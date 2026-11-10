@@ -99,10 +99,17 @@ export function rankContextCandidates(
     .map((candidate) => {
       const content = fileContents.get(candidate.path) ?? "";
 
-      const matchedSymbols = changedFunctions.filter((symbol) => {
-        const pattern = new RegExp(`\\b${symbol}\\s*\\(`);
-        return pattern.test(content);
-      });
+      const functionCalls = new Set<string>();
+
+     const callPattern = /\b([A-Za-z_$][\w$]*)\s*\(/g;
+
+    for (const match of content.matchAll(callPattern)) {
+      functionCalls.add(match[1]);
+    }
+
+    const matchedSymbols = changedFunctions.filter((symbol) =>
+      functionCalls.has(symbol)
+    );
 
       return {
         ...candidate,
