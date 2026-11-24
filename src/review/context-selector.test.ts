@@ -107,4 +107,37 @@ def process_refund(order, amount):
     expect(result[0]?.score).toBe(1);
     expect(result[0]?.matchedSymbols).toContain("apply_refund");
   });
+
+  it("matches function calls using exact names", () => {
+    const candidates = [
+      {
+        path: "app/checkout.py",
+        score: 0,
+        matchedSymbols: [],
+      },
+    ];
+
+    const fileContents = new Map([
+      [
+        "app/checkout.py",
+        `
+    apply_refund(order)
+    calculate_total(items)
+    `,
+      ],
+    ]);
+
+    const result = rankContextCandidates(
+      candidates,
+      ["apply_refund", "apply.refund", "calculate_total"],
+      fileContents
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.matchedSymbols).toEqual([
+      "apply_refund",
+      "calculate_total",
+    ]);
+    expect(result[0]?.score).toBe(2);
+  });
 });
