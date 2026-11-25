@@ -6,6 +6,10 @@ import { discoverContext } from "./review/discover-context.js";
 import { OpenAIReviewer } from "./llm/openai-reviewer.js";
 import { formatReview } from "./github/format-review.js";
 import { publishReview } from "./github/publish-review.js";
+import { scanPullRequest } from "./analysis/scan-pr.js";
+import { filterFindingsByChangedLines } from "./analysis/filter-findings.js";
+import { formatStaticAnalysisContext } from "./analysis/format-findings.js";
+import { redactSecrets } from "./security/redact-secrets.js";
 
 async function main(): Promise<void> {
   // 1. Load configuration
@@ -89,26 +93,60 @@ ${additionalContext || "No additional relevant files identified."}
     return;
   }
 
+  console.log("\nRunning static analysis...");
+
+  const staticFindings = await scanPullRequest(
+    owner,
+    repo,
+    pullRequest.head.sha
+  );
+
+  const relevantStaticFindings =
+    filterFindingsByChangedLines(staticFindings, files);
+
+  console.log(
+    `PR-relevant static findings: ${relevantStaticFindings.length}`
+  );
+
+  const staticAnalysisContext =
+    formatStaticAnalysisContext(relevantStaticFindings);
+
+  
+  const combinedReviewContext = [
+    enrichedReviewContext,
+    staticAnalysisContext,
+  ].join("\n\n");
+
+  const sanitizedReviewContext = redactSecrets(
+    combinedReviewContext
+  );
+
   // 6. Execute AI review
   console.log("\nRunning AI review...");
 
   const reviewer = new OpenAIReviewer();
-  const review = await reviewer.review(enrichedReviewContext);
+  const review = await reviewer.review(sanitizedReviewContext);
 
   // 7. Display findings
   console.log("\n=== AI REVIEW ===");
-  console.log(`\nSummary: ${review.summary}`);
+  console.log(redactSecrets(`\nSummary: ${review.summary}`));
 
   for (const finding of review.findings) {
     console.log(
-      `\n[${finding.severity.toUpperCase()}] ${finding.file}`
+      redactSecrets(
+        `\n[${finding.severity.toUpperCase()}] ${finding.file}`
+      )
     );
-    console.log(finding.title);
-    console.log(finding.explanation);
+    console.log(redactSecrets(finding.title));
+    console.log(redactSecrets(finding.explanation));
   }
 
+
   // 8. Format the review for GitHub
-  const reviewBody = formatReview(review);
+  const reviewBody = formatReview(
+    review,
+    relevantStaticFindings
+  );
 
   console.log("\n=== GITHUB REVIEW PREVIEW ===");
   console.log(reviewBody);

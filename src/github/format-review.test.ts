@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-
 import { formatReview } from "./format-review.js";
+import type { SemgrepFinding } from "../analysis/semgrep.js";
 
 describe("GitHub Review Formatter", () => {
   it("formats a review with findings", () => {
@@ -57,3 +57,91 @@ describe("GitHub Review Formatter", () => {
     );
   });
 });
+
+
+describe("Hybrid GitHub review formatter", () => {
+  const review = {
+    summary: "AI review completed.",
+    findings: [],
+  };
+
+  const staticFindings: SemgrepFinding[] = [
+    {
+      ruleId: "security.stripe-key",
+      file: "app/config.py",
+      line: 14,
+      severity: "ERROR",
+      message: "Stripe API Key detected",
+    },
+  ];
+
+  it("preserves static findings when AI reports no issues", () => {
+    const result = formatReview(review, staticFindings);
+
+    expect(result).toContain(
+      "Static Analysis Findings (Semgrep)"
+    );
+    expect(result).toContain("[ERROR] app/config.py:14");
+    expect(result).toContain("Rule: security.stripe-key");
+    expect(result).toContain("Stripe API Key detected");
+    expect(result).toContain("AI Review Findings");
+    expect(result).toContain("**Findings:** 0");
+  });
+
+  it("distinguishes missing static analysis from zero findings", () => {
+    const missingResults = formatReview(review);
+    const emptyResults = formatReview(review, []);
+
+    expect(missingResults).toContain(
+      "Static analysis results were not provided."
+    );
+
+    expect(emptyResults).toContain(
+      "Total findings on changed lines: 0"
+    );
+
+    expect(emptyResults).not.toContain(
+      "Static analysis results were not provided."
+    );
+  });
+
+  it("includes both static analysis and AI findings", () => {
+    const aiReview = {
+      summary: "Additional issue identified.",
+      findings: [
+        {
+          file: "app/orders.py",
+          severity: "high" as const,
+          title: "Incorrect refund calculation",
+          explanation: "The calculation uses a mutable balance.",
+        },
+      ],
+    };
+
+    const result = formatReview(aiReview, staticFindings);
+
+    expect(result).toContain("[ERROR] app/config.py:14");
+    expect(result).toContain(
+      "[HIGH] Incorrect refund calculation"
+    );
+    expect(result).toContain("**Findings:** 1");
+  });
+
+  it("redacts sensitive values from the final review", () => {
+    const reviewWithSecret = {
+      summary: 'Detected key: sk_test_EXAMPLE1234567890',
+      findings: [],
+    };
+
+    const result = formatReview(
+      reviewWithSecret,
+      staticFindings
+    );
+
+    expect(result).toContain("[REDACTED_STRIPE_KEY]");
+    expect(result).not.toContain(
+      "sk_test_EXAMPLE1234567890"
+    );
+  });
+});
+

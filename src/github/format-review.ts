@@ -1,14 +1,40 @@
-import type { ReviewResult } from "../llm/review-schema.js";
 
-export function formatReview(review: ReviewResult): string {
+import type { ReviewResult } from "../llm/review-schema.js";
+import type { SemgrepFinding } from "../analysis/semgrep.js";
+import { formatStaticAnalysisContext } from "../analysis/format-findings.js";
+import { redactSecrets } from "../security/redact-secrets.js";
+
+export function formatReview(
+  review: ReviewResult,
+  staticFindings?: SemgrepFinding[]
+): string {
   const lines: string[] = [
     "## AI PR Governor — Code Review",
     "",
     review.summary,
     "",
-    `**Findings:** ${review.findings.length}`,
-    "",
   ];
+
+  if (staticFindings !== undefined) {
+    lines.push(
+      formatStaticAnalysisContext(staticFindings),
+      ""
+    );
+  } else {
+    lines.push(
+      "## Static Analysis",
+      "",
+      "Static analysis results were not provided.",
+      ""
+    );
+  }
+
+  lines.push(
+    "## AI Review Findings",
+    "",
+    `**Findings:** ${review.findings.length}`,
+    ""
+  );
 
   if (review.findings.length === 0) {
     lines.push("No actionable findings identified.");
@@ -30,5 +56,5 @@ export function formatReview(review: ReviewResult): string {
     "_Automated AI review. Findings require human verification._"
   );
 
-  return lines.join("\n");
+  return redactSecrets(lines.join("\n"));
 }

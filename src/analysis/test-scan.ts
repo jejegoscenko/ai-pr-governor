@@ -1,6 +1,9 @@
 
 import "dotenv/config";
-
+import {
+  filterFindingsByChangedFiles,
+  filterFindingsByChangedLines,
+} from "./filter-findings.js";
 import { fetchPullRequest } from "../github/fetch-pr.js";
 import { scanPullRequest } from "./scan-pr.js";
 
@@ -18,11 +21,11 @@ async function main(): Promise<void> {
     throw new Error("Valid GitHub PR configuration is required.");
   }
 
-  const { pullRequest } = await fetchPullRequest(
-    owner,
-    repo,
-    pullNumber
-  );
+const { pullRequest, files } = await fetchPullRequest(
+  owner,
+  repo,
+  pullNumber
+);
 
   console.log(
     `Scanning PR #${pullNumber} at commit ${pullRequest.head.sha}`
@@ -34,9 +37,25 @@ async function main(): Promise<void> {
     pullRequest.head.sha
   );
 
-  console.log("\n=== SEMGREP FINDINGS ===");
+  const fileLevelFindings = filterFindingsByChangedFiles(
+    findings,
+    files
+  );
 
-  for (const finding of findings) {
+  const lineLevelFindings = filterFindingsByChangedLines(
+    findings,
+    files
+  );
+
+  console.log("\n=== STATIC ANALYSIS SUMMARY ===");
+  console.log(`Total repository findings: ${findings.length}`);
+  console.log(`Findings in changed files: ${fileLevelFindings.length}`);
+  console.log(`Findings on changed lines: ${lineLevelFindings.length}`);
+
+
+  console.log("\n=== PR-RELEVANT SEMGREP FINDINGS ===");
+
+  for (const finding of lineLevelFindings) {
     console.log(
       `[${finding.severity}] ${finding.file}:${finding.line}`
     );
@@ -45,8 +64,8 @@ async function main(): Promise<void> {
     console.log("");
   }
 
-  if (findings.length === 0) {
-    console.log("No findings detected by the selected Semgrep rules.");
+  if (lineLevelFindings.length === 0) {
+    console.log("No Semgrep findings starting on known changed lines.");
   }
 }
 
