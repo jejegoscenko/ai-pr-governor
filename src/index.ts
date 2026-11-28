@@ -1,18 +1,34 @@
+
 import "dotenv/config";
 
+// GitHub integration
 import { fetchPullRequest } from "./github/fetch-pr.js";
-import { buildReviewContext } from "./review/context.js";
-import { discoverContext } from "./review/discover-context.js";
-import { OpenAIReviewer } from "./llm/openai-reviewer.js";
 import { formatReview } from "./github/format-review.js";
 import { publishReview } from "./github/publish-review.js";
+
+// Repository context discovery
+import { buildReviewContext } from "./review/context.js";
+import { discoverContext } from "./review/discover-context.js";
+
+// AI review
+import { OpenAIReviewer } from "./llm/openai-reviewer.js";
+
+// Static analysis
 import { scanPullRequest } from "./analysis/scan-pr.js";
 import { filterFindingsByChangedLines } from "./analysis/filter-findings.js";
 import { formatStaticAnalysisContext } from "./analysis/format-findings.js";
+
+// Security
 import { redactSecrets } from "./security/redact-secrets.js";
 
+// Governance
+import { normalizeFindings } from "./governance/normalize-findings.js";
+import { classifyRisk } from "./governance/classify-risk.js";
+import { getGovernancePolicy } from "./governance/policies.js";
+import { evaluatePolicy } from "./governance/evaluate-policy.js";
+
 async function main(): Promise<void> {
-  // 1. Load configuration
+  // 1. Load and validate configuration
   const owner = process.env.GITHUB_OWNER;
   const repo = process.env.GITHUB_REPO;
   const pullNumber = Number(process.env.GITHUB_PR_NUMBER);
@@ -27,6 +43,14 @@ async function main(): Promise<void> {
       "Valid GITHUB_OWNER, GITHUB_REPO and GITHUB_PR_NUMBER are required."
     );
   }
+
+  const governancePolicy = getGovernancePolicy(
+    process.env.GOVERNANCE_POLICY ?? "standard"
+  );
+
+  console.log(
+    `Governance policy: ${governancePolicy.name}`
+  );
 
   // 2. Fetch pull request
   const { pullRequest, files } = await fetchPullRequest(
@@ -93,6 +117,7 @@ ${additionalContext || "No additional relevant files identified."}
     return;
   }
 
+  // 6. Execute static analysis
   console.log("\nRunning static analysis...");
 
   const staticFindings = await scanPullRequest(
@@ -111,7 +136,7 @@ ${additionalContext || "No additional relevant files identified."}
   const staticAnalysisContext =
     formatStaticAnalysisContext(relevantStaticFindings);
 
-  
+  // 7. Combine and sanitize review context
   const combinedReviewContext = [
     enrichedReviewContext,
     staticAnalysisContext,
@@ -121,13 +146,13 @@ ${additionalContext || "No additional relevant files identified."}
     combinedReviewContext
   );
 
-  // 6. Execute AI review
+  // 8. Execute AI review
   console.log("\nRunning AI review...");
 
   const reviewer = new OpenAIReviewer();
   const review = await reviewer.review(sanitizedReviewContext);
 
-  // 7. Display findings
+  // 9. Display AI findings
   console.log("\n=== AI REVIEW ===");
   console.log(redactSecrets(`\nSummary: ${review.summary}`));
 
@@ -137,23 +162,70 @@ ${additionalContext || "No additional relevant files identified."}
         `\n[${finding.severity.toUpperCase()}] ${finding.file}`
       )
     );
+
     console.log(redactSecrets(finding.title));
     console.log(redactSecrets(finding.explanation));
   }
 
-
-  // 8. Format the review for GitHub
-  const reviewBody = formatReview(
+  // 10. Normalize findings from both review engines
+  const governanceFindings = normalizeFindings(
     review,
     relevantStaticFindings
+  );
+
+  // 11. Determine the overall pull request risk
+  const riskAssessment = classifyRisk(governanceFindings);
+
+  // 12. Evaluate the risk against the selected policy
+  const governanceDecision = evaluatePolicy(
+    riskAssessment,
+    governancePolicy
+  );
+
+  // 13. Display governance decision
+  console.log("\n=== GOVERNANCE DECISION ===");
+
+  console.log(`Policy: ${governanceDecision.policyName}`);
+
+  console.log(
+    `Risk level: ${governanceDecision.riskLevel.toUpperCase()}`
+  );
+
+  console.log(
+    `Recommended action: ${governanceDecision.action}`
+  );
+
+  console.log(
+    `Human approval required: ${
+      governanceDecision.requiresHumanApproval ? "Yes" : "No"
+    }`
+  );
+
+  console.log("\nDecision reasons:");
+
+  for (const reason of governanceDecision.reasons) {
+    console.log(redactSecrets(`- ${reason}`));
+  }
+
+  console.log(
+    "\nGovernance decisions are advisory. Merge restrictions are not enforced."
+  );
+
+  // 14. Format the review for GitHub
+  const reviewBody = formatReview(
+    review,
+    relevantStaticFindings,
+    governanceDecision
   );
 
   console.log("\n=== GITHUB REVIEW PREVIEW ===");
   console.log(reviewBody);
 
-  // 9. Publish only when explicitly enabled
+  // 15. Publish only when explicitly enabled
   if (process.env.PUBLISH_REVIEW !== "true") {
-    console.log("\nPublishing disabled. Review was not posted to GitHub.");
+    console.log(
+      "\nPublishing disabled. Review was not posted to GitHub."
+    );
     return;
   }
 

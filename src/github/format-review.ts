@@ -1,12 +1,16 @@
 
 import type { ReviewResult } from "../llm/review-schema.js";
 import type { SemgrepFinding } from "../analysis/semgrep.js";
+import type { GovernanceDecision } from "../governance/types.js";
+
 import { formatStaticAnalysisContext } from "../analysis/format-findings.js";
+import { formatGovernanceDecision } from "../governance/format-decision.js";
 import { redactSecrets } from "../security/redact-secrets.js";
 
 export function formatReview(
   review: ReviewResult,
-  staticFindings?: SemgrepFinding[]
+  staticFindings?: SemgrepFinding[],
+  governanceDecision?: GovernanceDecision
 ): string {
   const lines: string[] = [
     "## AI PR Governor — Code Review",
@@ -15,6 +19,22 @@ export function formatReview(
     "",
   ];
 
+  // Governance assessment
+  if (governanceDecision !== undefined) {
+    lines.push(
+      formatGovernanceDecision(governanceDecision),
+      ""
+    );
+  } else {
+    lines.push(
+      "## Governance Assessment",
+      "",
+      "Governance assessment was not provided.",
+      ""
+    );
+  }
+
+  // Static analysis findings
   if (staticFindings !== undefined) {
     lines.push(
       formatStaticAnalysisContext(staticFindings),
@@ -29,6 +49,7 @@ export function formatReview(
     );
   }
 
+  // AI review findings
   lines.push(
     "## AI Review Findings",
     "",
